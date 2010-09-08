@@ -1,31 +1,66 @@
-package Agmsc;
-use Moose;
-use namespace::autoclean;
-our $VERSION = "0.01";
-use URI;
+#!/usr/bin/env perl
+use warnings;
+use strict;
+use WWW::Mechanize;
 
+my $agent = WWW::Mechanize->new;
+my $agmsc = Agmsc->new({ root => "http://sedition.com",
+                         agent => $agent }); # Profile def ? DB
+
+
+$agmsc->add_to_queue($agmsc->root);
+# Initialize step.
+
+
+
+while ( my $link = $agmsc->next_link )
 {
-    use Moose::Util::TypeConstraints;
-    subtype "Agmsc::Exclusion"
-        => as Ref
-        => where {
-            ref($_) =~ /CODE|Regexp/;
-        }
-    ;
+    die $link;
 }
 
-{
-    package Agmsc::Profile;
+
+exit 0;
+
+#  Subroutines
+#---------------------------------------------------------------------
+
+BEGIN {
+    package Agmsc;
     use Moose;
     use namespace::autoclean;
+    our $VERSION = "0.01";
+    use URI;
+    use HTTP::Response;
+
+    use Moose::Util::TypeConstraints;
+
+    subtype "Agmsc::LinkType" => as class_type('Agmsc::Link');
+
+    coerce "Agmsc::LinkType"
+        => from "Str"
+        => via { Agmsc::Link->new({ uri => URI->new($_) }) }
+#        => from "Object"
+#        => via { $_->isa("HTTP::Response") ?
+#                 { $_->
+#        }
+        ;
+
+
+    no Moose::Util::TypeConstraints;
 
     has "root" =>
         is => "ro",
-        isa => "URI",
+        isa => "Agmsc::LinkType",
+        coerce => 1,
         # isa => "ArrayRef[URI]",
         required => 1,
         #auto_deref => 1,
         ;
+
+#    after "root" => sub {
+#        my $self = shift;
+#        $self->add_to_queue($self->root);
+#    };
 
     has "exclude" =>
         is => "rw",
@@ -37,23 +72,28 @@ use URI;
         isa => "RegexpRef", # ArrayRef[Agmsc::Inclusion]
         ;
 
-    has "queue_manager" =>
-        is => "ro",
-        required => 1,
-        ;
-
-    has "logger" =>
-        is => "ro",
-        ;
-
-    has "agent" =>
+    has "links" =>
         is => "rw",
-        required => 1,
+        isa => "ArrayRef[Agmsc::Link]",
+        auto_deref => 1,
         ;
-}
+
+    has "queue" =>
+        traits => [ "Array" ],
+        is => "rw",
+        isa => "ArrayRef[Agmsc::Link]",
+        auto_deref => 1,
+        lazy => 1,
+        default => sub { [] },
+        handles => {
+            next_link => "shift",
+            add_to_queue => "push",
+        }
+        ;
+
+    __PACKAGE__->meta->make_immutable();
 
 
-{
     package Agmsc::Link;
     use Moose;
     use namespace::autoclean;
@@ -63,25 +103,22 @@ use URI;
         is => "ro",
         isa => "URI",
         required => 1,
+        handles => [qw/
+            protocol
+        /]
         ;
 
     has "headers" =>
         is => "ro",
         # isa => "ArrayRef[HTTP::Headers]", # keep history?
         isa => "HTTP::Headers",
-        required => 1,
+        # required => 1,
         ;
 
     has "status" =>
         is => "ro",
         isa => "Int",
-       required => 1,
-        ;
-
-    has "protocol" =>
-        is => "ro",
-        isa => "Str",
-        required => 1,
+        # required => 1,
         ;
 
     has "links" =>
@@ -124,18 +161,11 @@ use URI;
         DateTime->from_epoch( epoch => $time );
     }
 
+
+    __PACKAGE__->meta->make_immutable();
+
 }
 
+__DATA__
 
-
-1;
-
-__END__
-
-Check the b-tree example.
-
-Needs a report API so it can be plugged into something.
-
-Needs a direct report.
-
-Queue should schedule, in part, based on last modified times.
+ 
