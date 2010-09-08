@@ -223,4 +223,7 @@ BEGIN {
 
 __DATA__
 
- 
+Checked hash with pages and domains (resolve to IP).
+
+Robot rules.
+
