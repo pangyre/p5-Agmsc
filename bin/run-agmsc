@@ -2,22 +2,25 @@
 use warnings;
 use strict;
 use WWW::Mechanize;
+use YAML;
 
 my $agent = WWW::Mechanize->new;
 my $agmsc = Agmsc->new({ root => "http://sedition.com",
                          agent => $agent }); # Profile def ? DB
 
-
 $agmsc->add_to_queue($agmsc->root);
-# Initialize step.
-
-
+# Initialize step. Should be in build args.
 
 while ( my $link = $agmsc->next_link )
 {
-    die $link;
-}
+    print $agmsc->get($link->uri)->freshness_lifetime, $/;
+    print $link->due_for_checkup ? "DUE\n" : "not\n";
+#    print YAML::Dump($agmsc->get($link->uri));
+    # links in page
 
+
+    # $agmsc->add_to_queu($link); # With check info.
+}
 
 exit 0;
 
@@ -72,6 +75,14 @@ BEGIN {
         isa => "RegexpRef", # ArrayRef[Agmsc::Inclusion]
         ;
 
+    has "agent" =>
+        is => "ro",
+        isa => "LWP::UserAgent", # ArrayRef[URI]
+        handles => {
+            get => "get",
+        }
+        ;
+
     has "links" =>
         is => "rw",
         isa => "ArrayRef[Agmsc::Link]",
@@ -97,6 +108,8 @@ BEGIN {
     package Agmsc::Link;
     use Moose;
     use namespace::autoclean;
+    use overload '""' => sub { return +shift->uri->as_string }, fallback => 1;
+
 #?    use URI;
 
     has "uri" =>
@@ -105,21 +118,40 @@ BEGIN {
         required => 1,
         handles => [qw/
             protocol
+            host
+            path
+            fragment
+            query_string
         /]
         ;
 
-    has "headers" =>
+    package Agmsc::LinkCheck;
+    use Moose;
+    use namespace::autoclean;
+
+    has "response" =>
         is => "ro",
-        # isa => "ArrayRef[HTTP::Headers]", # keep history?
-        isa => "HTTP::Headers",
-        # required => 1,
+        isa => "HTTP::Response",
+        required => 1,
+        handles => {
+            status => "code",
+            content => "decoded_content",
+            base => "base",
+            freshness_lifetime => "freshness_lifetime",
+        }
         ;
 
-    has "status" =>
+    has "time" =>
         is => "ro",
-        isa => "Int",
-        # required => 1,
+        required => 1,
+        default => sub { time() },
         ;
+
+    # this has to go in Link and be run on the end of its LinkCheck array.
+    sub due_for_checkup {
+        my $self = shift;
+        ( $self->time - time() ) > $self->freshness_lifetime
+    }
 
     has "links" =>
         is => "rw",
